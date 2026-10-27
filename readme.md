@@ -2,6 +2,7 @@
 A rust-based calculator with a nostd core (see calc.rs)
 > [!NOTE]
 > This is just a project to learn about parsers for now there's no intent to support anything.
+> No AI was used to write this project (and limited access to documents)
 
 ## Features
 It can handle basic operators (`+, -, *, /`) and parentheses in standard notation.
