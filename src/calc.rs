@@ -8,8 +8,9 @@ fn match_number(input: &str) -> Result<Option<usize>, CalcError> {
     let mut i = 0;
     let mut has_sign = false;
     let mut found_digit = false;
+    let mut peekable_chars = input.chars().into_iter();
     while i < input.len() {
-        let c = input.chars().nth(i).ok_or(CalcError::UnexpectedParsingError)?;
+        let c = peekable_chars.next().ok_or(CalcError::UnexpectedParsingError)?;
         if DIGITS.contains(&c) {
             found_digit = true;
         }
@@ -77,9 +78,9 @@ fn parse_number(input: &str) -> Result<Option<f64>, CalcError> {
     let mut integer_part: u32 = 0;
     let mut decimal_part: u16 = 0;
     let mut decimal_part_count: u8 = 0;
-
+    let mut peekable_chars = input.chars().into_iter();
     while i < input.len() {
-        let c = input.chars().nth(i).ok_or(CalcError::UnexpectedParsingError)?;
+        let c = peekable_chars.next().ok_or(CalcError::UnexpectedParsingError)?;
         // The number given by the tokenizer isn't valid (this is an internal issue!)
         if !NUM_CHARS.contains(&c) {
            return Err(CalcError::UnexpectedNonNumberToken) 
@@ -400,7 +401,7 @@ pub fn lexer(mut raw_input: String) -> Result<Vec<Token>, CalcError> {
 }
 
 pub fn parse(tokens: &[Token]) -> Result<OperationTree, CalcError> {
-    let mut operations: Vec<OperationTree> = Vec::new();
+    let mut operations: Vec<Option<OperationTree>> = Vec::new();
     let mut parentheses_depth = 0;
     let mut subgroup_start: usize = 0;
 
@@ -408,11 +409,11 @@ pub fn parse(tokens: &[Token]) -> Result<OperationTree, CalcError> {
         match t {
             Token::Value(v) => {
                 if parentheses_depth != 0 { continue; }
-                operations.push(OperationTree::new(OperationContent::Value(*v)))
+                operations.push(Some(OperationTree::new(OperationContent::Value(*v))))
             },
             Token::Operator(op) => {
                 if parentheses_depth != 0 { continue; }
-                operations.push(OperationTree::new(OperationContent::Operator(*op)))
+                operations.push(Some(OperationTree::new(OperationContent::Operator(*op))))
             },
             Token::ParenthesisOpen => {
                 if parentheses_depth == 0 {
@@ -424,45 +425,79 @@ pub fn parse(tokens: &[Token]) -> Result<OperationTree, CalcError> {
                 parentheses_depth -= 1;
                 if parentheses_depth == 0 {
                     let subgroup_optree = parse(&tokens[subgroup_start+1..i])?;
-                    operations.push(subgroup_optree);
+                    operations.push(Some(subgroup_optree));
                 }
             }
         }
     }
 
     // Then, until we have merged everything into a single tree
-    while operations.len() > 1 {
+    let mut left_to_handle = operations.len();
+    while left_to_handle > 1 {
         // First we find the biggest operator yet
         let mut biggest_op: Operator = Operator::NoOp;
         let mut op_position = 0;
-        let mut i = 0;
-        for operation in &operations {
-            if operation.child_a.is_some() && operation.child_b.is_some() { 
-                i+=1;
-                continue;
-                }
-            if let OperationContent::Operator(operator) = &operation.content {
-                if operator.priority() > biggest_op.priority() {
-                    biggest_op = *operator;
-                    op_position = i;
+        for (i, op) in operations.iter().enumerate() {
+            if let Some(operation) = op {
+                if operation.child_a.is_some() && operation.child_b.is_some() { 
+                    continue;
+                    }
+                if let OperationContent::Operator(operator) = &operation.content {
+                    if operator.priority() > biggest_op.priority() {
+                        biggest_op = *operator;
+                        op_position = i;
+                    }
                 }
             }
-            i+=1;
         }
 
         if op_position == 0 || op_position >= operations.len()-1 {
             return Err(CalcError::MisplacedOperator(biggest_op))
         }
         // Then we merge that operator with its two operands
-        let op_a = operations.remove(op_position-1); //.ok_or(CalcError::MisplacedOperator(biggest_op))?;
-        let op_b = operations.remove(op_position); // not op_position+1 because the index shifted //.ok_or(CalcError::MisplacedOperator(biggest_op))?;
-        let operation = operations.get_mut(op_position-1).ok_or(CalcError::UndefinedError)?;
-        operation.child_a = Some(Box::new(op_a));
-        operation.child_b = Some(Box::new(op_b));
+        let op_left_pos = nearest_some_left(&operations, op_position).ok_or(CalcError::MissingOperationChild(biggest_op))?;
+        let op_a = operations.get_mut(op_left_pos).ok_or(CalcError::UnexpectedParsingError)?.take().ok_or(CalcError::MissingOperationChild(biggest_op))?;
+        let op_right_pos = nearest_some_right(&operations, op_position).ok_or(CalcError::MissingOperationChild(biggest_op))?;
+        let op_b = operations.get_mut(op_right_pos).ok_or(CalcError::UnexpectedParsingError)?.take().ok_or(CalcError::MissingOperationChild(biggest_op))?;
+        if let Some(operation) = operations.get_mut(op_position).ok_or(CalcError::UndefinedError)? {
+            operation.child_a = Some(Box::new(op_a));
+            operation.child_b = Some(Box::new(op_b));
+            left_to_handle -= 2;
+        }
     };
 
+    operations.retain(|x| x.is_some());
     let final_operation = operations.first().ok_or(CalcError::UnexpectedParsingError)?.clone();
-    return Ok(final_operation);
+    return Ok(final_operation.ok_or(CalcError::UnexpectedParsingError)?);
+}
+
+fn nearest_some_left(vec: &Vec<Option<OperationTree>>, from: usize) -> Option<usize> {
+    let mut i = from-1;
+    if i == 0 {
+        if vec.get(i).is_some() {
+            return Some(i)
+        } else {
+            return None
+        }
+    }
+    while i > 0 {
+        if vec.get(i).is_some_and(|x| x.is_some()) {
+            return Some(i)
+        }
+        i-=1;
+    }
+    return None
+}
+
+fn nearest_some_right(vec: &Vec<Option<OperationTree>>, from: usize) -> Option<usize> {
+    let mut i = from+1;
+    while i < vec.len() {
+        if vec.get(i).is_some_and(|x| x.is_some()) {
+            return Some(i)
+        }
+        i+=1;
+    }
+    return None
 }
 
 pub fn run_calculation(input: String) -> Result<f64, CalcError>{
