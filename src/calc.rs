@@ -482,16 +482,14 @@ impl ExprGroup {
             }
 
             if op_position == 0 || op_position >= operations.len()-1 {
-                return Err(CalcError::MisplacedOperator(biggest_op.clone()))
+                return Err(CalcError::MisplacedOperator(biggest_op))
             }
             // Then we merge that operator with its two operands
-            let op_a = operations.get(op_position-1).ok_or(CalcError::MisplacedOperator(biggest_op))?.clone();
-            let op_b = operations.get(op_position+1).ok_or(CalcError::MisplacedOperator(biggest_op))?.clone();
-            let operation = operations.get_mut(op_position).ok_or(CalcError::UndefinedError)?;
+            let op_a = operations.remove(op_position-1); //.ok_or(CalcError::MisplacedOperator(biggest_op))?;
+            let op_b = operations.remove(op_position); // not op_position+1 because the index shifted //.ok_or(CalcError::MisplacedOperator(biggest_op))?;
+            let operation = operations.get_mut(op_position-1).ok_or(CalcError::UndefinedError)?;
             operation.child_a = Some(Box::new(op_a));
             operation.child_b = Some(Box::new(op_b));
-            operations.remove(op_position-1);
-            operations.remove(op_position);
         };
 
         let final_operation = operations.first().ok_or(CalcError::UnexpectedParsingError)?.clone();
