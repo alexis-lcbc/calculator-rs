@@ -97,6 +97,10 @@ fn match_group(input: &String) -> Result<Option<usize>, CalcError> {
 /// Converts a string to a number
 fn parse_number(input: &str) -> Result<Option<f64>, CalcError> {
     // Greedily match from the beginning up to the first non-number token
+    if input.len() == 0 {
+        return Ok(None)
+    }
+
     let mut is_negative = false;
     let mut in_decimal= false;
     let mut i = 0;
@@ -246,7 +250,7 @@ impl fmt::Debug for Token {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 pub enum Operator {
     NoOp,
     Add,
@@ -505,3 +509,137 @@ pub fn run_calculation(input: String) -> Result<f64, CalcError>{
     Ok(optree.evaluate()?)
 }
 
+
+#[cfg(test)]
+mod test_parse_and_evaluate {
+    use super::*;
+
+    #[test]
+    fn test_simple_add() {
+        let result = run_calculation("3+4".to_string()).unwrap();
+        assert_eq!(result, 7.0);
+    }
+
+    #[test]
+    fn test_simple_sub() {
+        let result = run_calculation("10-5".to_string()).unwrap();
+        assert_eq!(result, 5.0);
+    }
+
+    #[test]
+    fn test_simple_sub_reverse() {
+        let result = run_calculation("5-10".to_string()).unwrap();
+        assert_eq!(result, -5.0);
+    }
+
+    #[test]
+    fn test_simple_mul() {
+        let result = run_calculation("6*7".to_string()).unwrap();
+        assert_eq!(result, 42.0);
+    }
+
+    #[test]
+    fn test_simple_div() {
+        let result = run_calculation("10/2".to_string()).unwrap();
+        assert_eq!(result, 5.0);
+    }
+
+
+    #[test]
+    fn test_negative_add() {
+        let result = run_calculation("-5+8".to_string()).unwrap();
+        assert_eq!(result, 3.0);
+    }
+
+    #[test]
+    fn test_negative_add_reverse() {
+        let result = run_calculation("5+(-8)".to_string()).unwrap();
+        assert_eq!(result, -3.0);
+    }
+
+    #[test]
+    fn test_negative_mul() {
+        let result = run_calculation("(-3)*3".to_string()).unwrap();
+        assert_eq!(result, -9.0);
+    }
+
+    #[test]
+    fn test_negative_div() {
+        let result = run_calculation("(-20)/2".to_string()).unwrap();
+        assert_eq!(result, -10.0);
+    }
+
+    #[test]
+    fn test_operator_priority() {
+        let result = run_calculation("19-8+5*4/2^2".to_string()).unwrap();
+        assert_eq!(result, 16.0);
+    }
+
+    #[test]
+    fn test_complex_expr1() {
+        let result = run_calculation("(12.5+3.5)*2-(18/3+4)*(7-2)+10/2".to_string()).unwrap();
+        assert_eq!(result, -13.0);
+    }
+
+    #[test]
+    fn test_complex_expr2() {
+        let result = run_calculation("( 15.5 - 3 * ( 2.2 + 1.8 ) ^ 2 + 144 / 12 / 2 - ( -5.5 + 1.5 ) * 3.14159 ^ 0 ) * ( ( 10 - 8 ) ^ 3 / 2 ) + 2.5 * 4 ^ 2.5 / ( 2 ^ 3.5 / 2 ^ 0.5 - 3 )".to_string()).unwrap();
+        assert_eq!(result, -74.0);
+    }
+
+}
+
+
+#[cfg(test)]
+mod test_parse_tokens {
+    use crate::calc::{Operator, parse_number, parse_operator};
+
+    #[test]
+    fn num_parse_int() {
+        assert_eq!(parse_number("16").unwrap().unwrap(), 16.0);
+    }
+
+    #[test]
+    fn num_parse_negative_int() {
+        assert_eq!(parse_number("-6").unwrap().unwrap(), -6.0);
+    }
+
+    #[test]
+    fn num_parse_float() {
+        assert_eq!(parse_number("42.67").unwrap().unwrap(), 42.67);
+    }
+
+    #[test]
+    fn num_parse_float_negative() {
+        assert_eq!(parse_number("-55.56").unwrap().unwrap(), -55.56);
+    }
+
+    #[test]
+    fn num_fail_parse_notnumber() {
+        println!("{:?}", parse_number("a"));
+        assert!(parse_number("a").is_err());
+    }
+
+    #[test]
+    fn num_fail_parse_emptystr() {
+        assert!(parse_number("").is_ok_and(|x| x.is_none()));
+    }
+
+    #[test]
+    fn operator_parse_all() {
+        assert!(parse_operator("+").is_ok_and(|x| x == Operator::Add));
+        assert!(parse_operator("-").is_ok_and(|x| x == Operator::Sub));
+        assert!(parse_operator("*").is_ok_and(|x| x == Operator::Mul));
+        assert!(parse_operator("/").is_ok_and(|x| x == Operator::Div));
+        assert!(parse_operator("^").is_ok_and(|x| x == Operator::Pow));
+    }
+
+    #[test]
+    fn operator_parse_fail_notoperator() {
+        assert!(parse_operator("1").is_err());
+    }
+}
+
+mod test_matcher {
+
+}
