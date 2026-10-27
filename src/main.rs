@@ -1,4 +1,4 @@
-use std::{env, io::{self, Write, stdout}};
+use std::{env, io::{self, Write}};
 use crate::calc::{run_calculation};
 pub mod calc;
 

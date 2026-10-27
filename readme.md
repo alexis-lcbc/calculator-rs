@@ -5,7 +5,7 @@ A rust-based calculator with a nostd core (see calc.rs)
 > No AI was used (check individual commits) to write this project (and limited access to documents)
 
 ## Features
-It can handle basic operators (`+, -, *, /`) and parentheses in standard notation.
+It can handle basic operators (`+, -, *, /, ^`) and parentheses in standard notation.
 Both interactive CLI mode and command with argument mode.
 
 ## Usage
