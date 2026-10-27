@@ -439,8 +439,12 @@ impl ExprGroup {
                 insertions_to_perform.push((i, Token::Operator(Operator::Mul)));
             }
         }
+
+        // Store the offset created by the insertions
+        let mut offset = 0;
         for (i, t) in insertions_to_perform {
-            self.parsed_content.insert(i, t);
+            self.parsed_content.insert(i+offset, t);
+            offset+=1;
         }
 
         Ok(Token::Group(self.parsed_content.clone()))
