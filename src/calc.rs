@@ -93,7 +93,7 @@ fn match_group(input: &String) -> Result<Option<usize>, CalcError> {
 }
 
 
-fn parse_number(input: &String) -> Result<Option<f32>, CalcError> {
+fn parse_number(input: &String) -> Result<Option<f64>, CalcError> {
     // Greedily match from the beginning up to the first non-number token
     let mut is_negative = false;
     let mut in_decimal= false;
@@ -140,7 +140,7 @@ fn parse_number(input: &String) -> Result<Option<f32>, CalcError> {
     }
 
     // Final part of the conversion
-    let mut v = (integer_part as f32 + decimal_part as f32 / (10 as f32).powi(decimal_part_count as i32)) as f32;
+    let mut v = (integer_part as f64 + decimal_part as f64 / (10 as f64).powi(decimal_part_count as i32)) as f64;
     if is_negative {
         v *= -1.0;
     }
@@ -197,7 +197,7 @@ const OPERATOR_CHARS: [char; 4] = [
 
 #[derive(Clone)]
 pub enum Token {
-    Value(f32),
+    Value(f64),
     Operator(Operator),
     Group(Vec<Token>)
 }
@@ -288,7 +288,7 @@ impl fmt::Debug for Operator {
 #[derive(Clone, Debug)]
 enum OperationContent {
     Operator(Operator),
-    Value(f32)
+    Value(f64)
 }
 
 #[derive(Debug)]
@@ -338,7 +338,7 @@ pub struct OperationTree {
 }
 
 impl OperationTree {
-    pub fn evaluate(&self) -> Result<f32, CalcError> {
+    pub fn evaluate(&self) -> Result<f64, CalcError> {
         match &self.content {
             OperationContent::Value(v) => Ok(v.clone()),
             OperationContent::Operator(op) => {
@@ -488,7 +488,7 @@ impl ExprGroup {
 }
 
 
-pub fn run_calculation(input: String) -> Result<f32, CalcError>{
+pub fn run_calculation(input: String) -> Result<f64, CalcError>{
     let mut root_group = ExprGroup::new(input);
     let _tokens = root_group.parse()?;
     let optree = root_group.into_operation_tree()?;
