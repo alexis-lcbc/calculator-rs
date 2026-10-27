@@ -31,8 +31,9 @@ fn match_number(input: &String) -> Result<Option<usize>, CalcError> {
                 has_sign = true;
             } else {
                 if !found_digit {
-                    println!("malformed number in {} near {} ('{}')", input, i, c);
-                    return Err(CalcError::MalformedNumber(input.to_string()))
+                    return Ok(None)
+                    // println!("malformed number in {} near {} ('{}')", input, i, c);
+                    // return Err(CalcError::MalformedNumber(input.to_string()))
                 }
                 return Ok(Some(i)); // The '-' was in the middle ; then we have reached the end of a number and will then get an Operator +
             }
@@ -93,6 +94,7 @@ fn match_group(input: &String) -> Result<Option<usize>, CalcError> {
 }
 
 
+/// Converts a string to a number
 fn parse_number(input: &String) -> Result<Option<f64>, CalcError> {
     // Greedily match from the beginning up to the first non-number token
     let mut is_negative = false;
@@ -148,6 +150,7 @@ fn parse_number(input: &String) -> Result<Option<f64>, CalcError> {
     return Ok(Some(v));
 }
 
+/// Converts a string to an operator
 fn parse_operator(input: &String) -> Result<Operator, CalcError> {
     Ok(    
         match input.as_str() {
@@ -362,6 +365,7 @@ impl OperationTree {
 }
 
 impl ExprGroup {
+    /// Create a new Expression Group (a unit of parseable and parsed input)
     pub fn new(contents_raw: String) -> Self {
         Self {
             contents_consumed: contents_raw,
@@ -376,10 +380,11 @@ impl ExprGroup {
         }
     }
 
-
+    /// Parse the expression inside this ExprGroup into a Group token containing subtokens
     pub fn parse(&mut self) -> Result<Token, CalcError> {
         let mut last_token_type_was_num = false;
         let mut last_token_type_was_grp = false;
+        // Match in order for groups, numbers then operators extracting a list of tokens from the raw 
         while self.contents_consumed.len() > 0 {
             match match_group(&self.contents_consumed)? {
                 Some(grp_end) => {
