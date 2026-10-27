@@ -1,4 +1,4 @@
-use std::{env, io::{self, Write}};
+use std::{env, io::{self, Write, stdout}};
 use crate::calc::{run_calculation};
 pub mod calc;
 
@@ -20,12 +20,18 @@ fn main() {
     }
 
     println!("Very cool calculator!");
-    println!("type /q to exit");
+    println!("type /q to exit, /c to clear");
     loop {
         let input = read_input().expect("Could not read input");
         if input.starts_with("/q") {
             println!("goodbye!");
             break;
+        }
+        if input.starts_with("/c") {
+            print!("\x1b[2J");
+            print!("\x1b[H");
+            println!("Very cool calculator!");
+            continue;
         }
         match run_calculation(input) {
             Ok(r) => {

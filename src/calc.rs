@@ -158,6 +158,7 @@ fn parse_operator(input: &String) -> Result<Operator, CalcError> {
             "-" => Operator::Sub,
             "*" => Operator::Mul,
             "/" => Operator::Div,
+            "^" => Operator::Pow,
             _ => return Err(CalcError::InvalidTokenError(input.to_string()))
         }
     )
@@ -191,11 +192,12 @@ const NUM_CHARS: [char; 12] = [
     '.'
 ];
 
-const OPERATOR_CHARS: [char; 4] = [
+const OPERATOR_CHARS: [char; 5] = [
     '/',
     '*',
     '-',
     '+',
+    '^'
 ];
 
 #[derive(Clone)]
@@ -250,7 +252,8 @@ pub enum Operator {
     Add,
     Sub,
     Mul,
-    Div
+    Div,
+    Pow
 }
 
 impl Operator {
@@ -258,7 +261,8 @@ impl Operator {
         match self {
             Operator::NoOp => 0,
             Operator::Add | Operator::Sub => 1,
-            Operator::Mul | Operator::Div => 2
+            Operator::Mul | Operator::Div => 2,
+            Operator::Pow => 3
         }
     }
 }
@@ -270,6 +274,7 @@ impl fmt::Display for Operator {
             Self::Sub => write!(f, "-"),
             Self::Mul => write!(f, "*"),
             Self::Div => write!(f, "/"),
+            Self::Pow => write!(f, "^"),
             Self::NoOp => write!(f, "N/A")
         }
     }
@@ -350,6 +355,7 @@ impl OperationTree {
                             }
                             Ok(v_a / v_b)
                         },
+                        Operator::Pow => Ok(v_a.powf(v_b)),
                         Operator::NoOp => Err(CalcError::EvaluationError)
                     }
             }
