@@ -1,7 +1,7 @@
 use core::fmt;
 
 /// Matches a number from the start of the input up until it stops
-fn match_number(input: &String) -> Result<Option<usize>, CalcError> {
+fn match_number(input: &str) -> Result<Option<usize>, CalcError> {
     if input.len() == 0 {
         return Ok(None)
     }
@@ -22,8 +22,6 @@ fn match_number(input: &String) -> Result<Option<usize>, CalcError> {
                 break;
             }
         }
-
-
 
         // If it's a sign indicator make sure it's in front and we will also check if it has at least one digit afterwards
         if c == '-' {
@@ -49,50 +47,22 @@ fn match_number(input: &String) -> Result<Option<usize>, CalcError> {
 }
 
 /// Matches an operator at the beginning of the input (this assumes an operator is 1 char exactly)
-fn match_operator(input: &String) -> Result<bool, CalcError> {
+fn match_operator(input: &str) -> Result<bool, CalcError> {
     if input.len() == 0 {
         return Ok(false)
     }
     return Ok(OPERATOR_CHARS.contains(&input.chars().nth(0).ok_or(CalcError::UnexpectedParsingError)?));
 }
 
-/// Matches a groupped expression (parentheses) at the beginning of the input until it ends
-fn match_group(input: &String) -> Result<Option<usize>, CalcError> {
-    if input.len() == 0 {
-        return Ok(None)
+fn match_parenthesis(input: &str) -> Result<Option<Token>, CalcError> {
+    if input.starts_with('(') {
+        return Ok(Some(Token::ParenthesisOpen))
     }
-    let c = input.chars().nth(0).ok_or(CalcError::UnexpectedParsingError)?;
-    // if we don't start with a group, then stop
-    if c != '(' {
-        return Ok(None)
+    if input.starts_with(')') {
+        return Ok(Some(Token::ParenthesisClose))
     }
-    
-    // Handle nested parentheses
-    let mut i = 0;
-    let mut depth = 0;
-    while i < input.len() {
-        if input.chars().nth(i) == Some('(') {
-            depth+=1;
-        }
-        if input.chars().nth(i) == Some(')') {
-            depth-=1;
-            if depth == 0 {
-                break;
-            }
-        }
-        i+=1;
-    }
-
-    if depth != 0 {
-        println!("Reached end with unfinished parentheses");
-        println!("depth of {}", depth);
-        println!("in input: {}", input);
-        return Err(CalcError::MismatchedParentheses);
-    }
-    
-    return Ok(Some(i));
+    return Ok(None)
 }
-
 
 /// Converts a string to a number
 fn parse_number(input: &str) -> Result<Option<f64>, CalcError> {
@@ -204,11 +174,12 @@ const OPERATOR_CHARS: [char; 5] = [
     '^'
 ];
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub enum Token {
     Value(f64),
     Operator(Operator),
-    Group(Vec<Token>)
+    ParenthesisOpen,
+    ParenthesisClose
 }
 
 impl Token {
@@ -219,9 +190,16 @@ impl Token {
         }
     }
 
-    pub fn is_group(&self) -> bool {
+    pub fn is_open_parenthesis(&self) -> bool {
         match self {
-            Self::Group(_) => true,
+            Self::ParenthesisOpen => true,
+            _ => false
+        }
+    }
+
+    pub fn is_close_parenthesis(&self) -> bool {
+        match self {
+            Self::ParenthesisClose => true,
             _ => false
         }
     }
@@ -237,8 +215,11 @@ impl Token {
 impl fmt::Debug for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Group(toks) => {
-                write!(f, "GRP[{:?}]", toks)
+            Self::ParenthesisOpen => {
+                write!(f, "(")
+            },
+            Self::ParenthesisClose => {
+                write!(f, ")")
             },
             Self::Operator(op) => {
                 write!(f, "OP[{:?}]", op)
@@ -328,12 +309,6 @@ impl fmt::Display for CalcError {
     }
 }
 
-pub struct ExprGroup {
-    contents_consumed: String,
-    parsed_content: Vec<Token>
-}
-
-
 // What we should have is a struct S that holds an operator and two other S  
 #[derive(Clone, Debug)]
 pub struct OperationTree {
@@ -343,6 +318,10 @@ pub struct OperationTree {
 }
 
 impl OperationTree {
+    fn new(content: OperationContent) -> Self {
+        return OperationTree { content, child_a: None, child_b: None }
+    }
+
     pub fn evaluate(&self) -> Result<f64, CalcError> {
         match &self.content {
             OperationContent::Value(v) => Ok(*v),
@@ -367,53 +346,36 @@ impl OperationTree {
     }
 }
 
-impl ExprGroup {
-    /// Create a new Expression Group (a unit of parseable and parsed input)
-    pub fn new(contents_raw: String) -> Self {
-        Self {
-            contents_consumed: contents_raw,
-            parsed_content: Vec::new()
-        }
-    }
 
-    fn with_parsed_content(parsed_content: Vec<Token>) -> Self {
-        Self {
-            contents_consumed: String::new(),
-            parsed_content
-        }
-    }
+pub fn lexer(mut raw_input: String) -> Result<Vec<Token>, CalcError> {
+    let mut last_token_type_was_num = false;
+    let mut last_token_type_was_grp = false;
+    let mut tokens: Vec<Token> = Vec::new();
+    raw_input = raw_input.chars().filter(|c| !c.is_whitespace()).collect();
+    let mut input = raw_input.as_mut_str();
 
-    /// Parse the expression inside this ExprGroup into a Group token containing subtokens
-    pub fn parse(&mut self) -> Result<Token, CalcError> {
-        // remove all whitespaces (spaces, tabs, etc...) from input
-        self.contents_consumed = self.contents_consumed.chars().filter(|c| !c.is_whitespace()).collect();
-        
-        let mut last_token_type_was_num = false;
-        let mut last_token_type_was_grp = false;
-        // Match in order for groups, numbers then operators extracting a list of tokens from the raw 
-        while self.contents_consumed.len() > 0 {
-            match match_group(&self.contents_consumed)? {
-                Some(grp_end) => {
-                    let mut subgroup_raw_contents = self.contents_consumed.clone();
-                    self.contents_consumed = subgroup_raw_contents.split_off(grp_end); // cut the end (there's still a ')' left we trim it later)
-                    subgroup_raw_contents = subgroup_raw_contents.split_off(1); // remove first parenthesis
-                    self.contents_consumed = self.contents_consumed.split_off(1); // trim off the remaining ')'
-                    self.parsed_content.push(ExprGroup::new(subgroup_raw_contents).parse()?);
+    while input.len() > 0 {
+        match match_parenthesis(&input)? {
+                Some(parenthesis) => {
                     last_token_type_was_num = false;
-                    last_token_type_was_grp = true;
+                    if parenthesis == Token::ParenthesisClose {
+                        last_token_type_was_grp = true;
+                    }
+                    input = &mut input[1..];
+                    tokens.push(parenthesis);
                     continue;
                 },
                 None => {}
             }
 
-            match match_number(&self.contents_consumed)? {
+            match match_number(&input)? {
                 Some(num_end) => {
                     // If last token is a number, then the + or - in front of what could be a number is actually an operator!
-                    if !last_token_type_was_num && !(last_token_type_was_grp && (self.contents_consumed.starts_with("+") || self.contents_consumed.starts_with("-")))
+                    if !last_token_type_was_num && !(last_token_type_was_grp && (input.starts_with("+") || input.starts_with("-")))
                     {
-                        let raw_num = &self.contents_consumed[..num_end];
-                        self.parsed_content.push(Token::Value(parse_number(raw_num)?.ok_or(CalcError::UndefinedError)?));
-                        self.contents_consumed = self.contents_consumed[num_end..].to_string();
+                        let raw_num = &input[..num_end];
+                        tokens.push(Token::Value(parse_number(raw_num)?.ok_or(CalcError::UndefinedError)?));
+                        input = &mut input[num_end..];
                         last_token_type_was_num = true;
                         last_token_type_was_grp = false;
                         continue;
@@ -422,90 +384,90 @@ impl ExprGroup {
                 None => {}
             }
 
-            if match_operator(&self.contents_consumed)? {
-                let raw_op = &self.contents_consumed[..1];
-                self.parsed_content.push(Token::Operator(parse_operator(raw_op)?));
-                self.contents_consumed = self.contents_consumed[1..].to_string();
+            if match_operator(&input)? {
+                let raw_op = &input[..1];
+                tokens.push(Token::Operator(parse_operator(raw_op)?));
+                input = &mut input[1..];
                 last_token_type_was_num = false;
                 last_token_type_was_grp = false;
                 continue;
             }
 
             break;
-        }
-
-        // post-processing to find implied operations
-        let mut insertions_to_perform: Vec<(usize, Token)> = Vec::new();
-        for (i, t) in self.parsed_content.iter().enumerate() {
-            if i == 0 {continue};
-            let prev_tok = self.parsed_content.get(i-1).ok_or(CalcError::UnexpectedParsingError)?;
-            if (prev_tok.is_group() || prev_tok.is_value()) && !t.is_operator() {
-                insertions_to_perform.push((i, Token::Operator(Operator::Mul)));
-            }
-        }
-
-        // Store the offset created by the insertions
-        let mut offset = 0;
-        for (i, t) in insertions_to_perform {
-            self.parsed_content.insert(i+offset, t);
-            offset+=1;
-        }
-
-        Ok(Token::Group(self.parsed_content.clone()))
     }
 
-    pub fn into_operation_tree(&self) -> Result<OperationTree, CalcError> {
-        let mut operations: Vec<OperationTree> = Vec::new();
-        // First we convert all tokens to OperationTree singleton elements
-        for t in &self.parsed_content {
-            operations.push(match t {
-                Token::Operator(op) => OperationTree { content: OperationContent::Operator(*op), child_a: None, child_b: None },
-                Token::Value(v) => OperationTree { content: OperationContent::Value(*v), child_a: None, child_b: None },
-                Token::Group(grp) =>   ExprGroup::with_parsed_content(grp.to_vec()).into_operation_tree()?
-            });
-        };
-
-        // Then, until we have merged everything into a single tree
-        while operations.len() > 1 {
-            // First we find the biggest operator yet
-            let mut biggest_op: Operator = Operator::NoOp;
-            let mut op_position = 0;
-            let mut i = 0;
-            for operation in &operations {
-                if operation.child_a.is_some() && operation.child_b.is_some() { 
-                    i+=1;
-                    continue;
-                 }
-                if let OperationContent::Operator(operator) = &operation.content {
-                    if operator.priority() > biggest_op.priority() {
-                        biggest_op = *operator;
-                        op_position = i;
-                    }
-                }
-                i+=1;
-            }
-
-            if op_position == 0 || op_position >= operations.len()-1 {
-                return Err(CalcError::MisplacedOperator(biggest_op))
-            }
-            // Then we merge that operator with its two operands
-            let op_a = operations.remove(op_position-1); //.ok_or(CalcError::MisplacedOperator(biggest_op))?;
-            let op_b = operations.remove(op_position); // not op_position+1 because the index shifted //.ok_or(CalcError::MisplacedOperator(biggest_op))?;
-            let operation = operations.get_mut(op_position-1).ok_or(CalcError::UndefinedError)?;
-            operation.child_a = Some(Box::new(op_a));
-            operation.child_b = Some(Box::new(op_b));
-        };
-
-        let final_operation = operations.first().ok_or(CalcError::UnexpectedParsingError)?.clone();
-        return Ok(final_operation)
-    }
+    Ok(tokens)
 }
 
+pub fn parse(tokens: &[Token]) -> Result<OperationTree, CalcError> {
+    let mut operations: Vec<OperationTree> = Vec::new();
+    let mut parentheses_depth = 0;
+    let mut subgroup_start: usize = 0;
+
+    for (i, t) in tokens.iter().enumerate() {
+        match t {
+            Token::Value(v) => {
+                if parentheses_depth != 0 { continue; }
+                operations.push(OperationTree::new(OperationContent::Value(*v)))
+            },
+            Token::Operator(op) => {
+                if parentheses_depth != 0 { continue; }
+                operations.push(OperationTree::new(OperationContent::Operator(*op)))
+            },
+            Token::ParenthesisOpen => {
+                if parentheses_depth == 0 {
+                    subgroup_start = i;
+                }
+                parentheses_depth += 1;
+            },
+            Token::ParenthesisClose => {
+                parentheses_depth -= 1;
+                if parentheses_depth == 0 {
+                    let subgroup_optree = parse(&tokens[subgroup_start+1..i])?;
+                    operations.push(subgroup_optree);
+                }
+            }
+        }
+    }
+
+    // Then, until we have merged everything into a single tree
+    while operations.len() > 1 {
+        // First we find the biggest operator yet
+        let mut biggest_op: Operator = Operator::NoOp;
+        let mut op_position = 0;
+        let mut i = 0;
+        for operation in &operations {
+            if operation.child_a.is_some() && operation.child_b.is_some() { 
+                i+=1;
+                continue;
+                }
+            if let OperationContent::Operator(operator) = &operation.content {
+                if operator.priority() > biggest_op.priority() {
+                    biggest_op = *operator;
+                    op_position = i;
+                }
+            }
+            i+=1;
+        }
+
+        if op_position == 0 || op_position >= operations.len()-1 {
+            return Err(CalcError::MisplacedOperator(biggest_op))
+        }
+        // Then we merge that operator with its two operands
+        let op_a = operations.remove(op_position-1); //.ok_or(CalcError::MisplacedOperator(biggest_op))?;
+        let op_b = operations.remove(op_position); // not op_position+1 because the index shifted //.ok_or(CalcError::MisplacedOperator(biggest_op))?;
+        let operation = operations.get_mut(op_position-1).ok_or(CalcError::UndefinedError)?;
+        operation.child_a = Some(Box::new(op_a));
+        operation.child_b = Some(Box::new(op_b));
+    };
+
+    let final_operation = operations.first().ok_or(CalcError::UnexpectedParsingError)?.clone();
+    return Ok(final_operation);
+}
 
 pub fn run_calculation(input: String) -> Result<f64, CalcError>{
-    let mut root_group = ExprGroup::new(input);
-    let _tokens = root_group.parse()?;
-    let optree = root_group.into_operation_tree()?;
+    let tokens = lexer(input)?;
+    let optree = parse(&tokens.as_slice())?;
     Ok(optree.evaluate()?)
 }
 
@@ -592,7 +554,7 @@ mod test_parse_and_evaluate {
 
 #[cfg(test)]
 mod test_parse_tokens {
-    use crate::calc::{Operator, parse_number, parse_operator};
+    use super::{Operator, parse_number, parse_operator};
 
     #[test]
     fn num_parse_int() {
@@ -638,8 +600,4 @@ mod test_parse_tokens {
     fn operator_parse_fail_notoperator() {
         assert!(parse_operator("1").is_err());
     }
-}
-
-mod test_matcher {
-
 }

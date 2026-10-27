@@ -1,5 +1,5 @@
 use std::{env, io::{self, Write}, time::Instant};
-use crate::calc::{run_calculation};
+use crate::calc::{CalcError, lexer, parse, run_calculation};
 pub mod calc;
 
 fn main() {
@@ -22,19 +22,13 @@ fn main() {
         }
         let input = args.split_off(expr_start).join(" ");
         if input.len() != 0 {
-            let start = Instant::now();
-            match run_calculation(input) {
+            match run_calc_debug(input) {
                 Ok(r) => {
                     println!("{}", r)
                 }
                 Err(err) => {
                     eprintln!("{}", err)
                 },
-            }
-            if flag_debug {
-                let stop = Instant::now();
-                let calc_duration = stop - start;
-                println!("in {} nanoseconds", calc_duration.as_nanos())
             }
             return;
         }
@@ -55,19 +49,13 @@ fn main() {
             continue;
         }
 
-        let start = Instant::now();
-        match run_calculation(input) {
+        match run_calc_debug(input) {
             Ok(r) => {
                 println!("= {}", r)
             }
             Err(err) => {
                 eprintln!("! {}", err)
             },
-        }
-        if flag_debug {
-            let stop = Instant::now();
-            let calc_duration = stop - start;
-            println!("in {} nanoseconds", calc_duration.as_nanos())
         }
     }
 }
@@ -80,3 +68,21 @@ fn read_input() -> Result<String, io::Error> {
     return Ok(input);
 }
 
+
+fn run_calc_debug(input: String) -> Result<f64, CalcError> {
+    let lexer_start = Instant::now();
+    let tokens = lexer(input)?;
+    let lexer_stop = Instant::now();
+    println!("Lexing took {} ns", (lexer_stop - lexer_start).as_nanos());
+    let parser_start = Instant::now();
+    let optree = parse(&tokens.as_slice())?;
+    let parser_stop = Instant::now();
+    println!("parsing took {} ns", (parser_stop - parser_start).as_nanos());
+    let eval_start = Instant::now();
+    let result = optree.evaluate();
+    let eval_stop = Instant::now();
+    println!("eval took {} ns", (eval_stop - eval_start).as_nanos());
+    println!("total took {} ns", (eval_stop - lexer_start).as_nanos());
+
+    return result;
+}
