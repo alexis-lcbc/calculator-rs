@@ -26,7 +26,7 @@ fn match_number(input: &String) -> Result<Option<usize>, CalcError> {
 
 
         // If it's a sign indicator make sure it's in front and we will also check if it has at least one digit afterwards
-        if c == '-' || c == '+' {
+        if c == '-' {
             if i == 0 {
                 has_sign = true;
             } else {
@@ -34,7 +34,7 @@ fn match_number(input: &String) -> Result<Option<usize>, CalcError> {
                     println!("malformed number in {} near {} ('{}')", input, i, c);
                     return Err(CalcError::MalformedNumber(input.to_string()))
                 }
-                return Ok(Some(i)); // The '+' or '-' was in the middle ; then we have reached the end of a number and will then get an Operator +
+                return Ok(Some(i)); // The '-' was in the middle ; then we have reached the end of a number and will then get an Operator +
             }
         }
         i+=1;
@@ -173,7 +173,7 @@ const DIGITS: [char; 10] = [
     '9'
 ];
 
-const NUM_CHARS: [char; 13] = [
+const NUM_CHARS: [char; 12] = [
     '0',
     '1',
     '2',
@@ -185,8 +185,7 @@ const NUM_CHARS: [char; 13] = [
     '8',
     '9',
     '-',
-    '.',
-    '+'
+    '.'
 ];
 
 const OPERATOR_CHARS: [char; 4] = [
@@ -302,7 +301,8 @@ pub enum CalcError {
     UndefinedError,
     MisplacedOperator(Operator),
     EvaluationError,
-    MissingOperationChild(Operator)
+    MissingOperationChild(Operator),
+    DivisionByZero
 }
 
 impl fmt::Display for CalcError {
@@ -316,7 +316,8 @@ impl fmt::Display for CalcError {
             Self::UndefinedError => format!("Undefined error?!"),
             Self::MisplacedOperator(operator) => format!("Misplaced operator {:?}", operator),
             Self::EvaluationError => format!("Error while evaluating the expression"),
-            Self::MissingOperationChild(operator) => format!("Missing an operand to operator {:?}", operator)
+            Self::MissingOperationChild(operator) => format!("Missing an operand to operator {:?}", operator),
+            Self::DivisionByZero => format!("Attempted to divide by 0")
 
         })
     }
@@ -347,7 +348,12 @@ impl OperationTree {
                         Operator::Add => Ok(v_a + v_b),
                         Operator::Sub => Ok(v_a - v_b),
                         Operator::Mul => Ok(v_a * v_b),
-                        Operator::Div => Ok(v_a / v_b),
+                        Operator::Div => {
+                            if v_b == 0.0 {
+                                return Err(CalcError::DivisionByZero)
+                            }
+                            Ok(v_a / v_b)
+                        },
                         Operator::NoOp => Err(CalcError::EvaluationError)
                     }
             }
@@ -462,6 +468,9 @@ impl ExprGroup {
                     }
                 }
                 i+=1;
+            }
+            if op_position == 0 || op_position >= operations.len()-1 {
+                return Err(CalcError::MisplacedOperator(biggest_op.clone()))
             }
             // Then we merge that operator with its two operands
             let op_a = operations.get(op_position-1).ok_or(CalcError::MisplacedOperator(biggest_op.clone()))?.clone();
