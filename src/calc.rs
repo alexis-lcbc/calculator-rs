@@ -95,7 +95,7 @@ fn match_group(input: &String) -> Result<Option<usize>, CalcError> {
 
 
 /// Converts a string to a number
-fn parse_number(input: &String) -> Result<Option<f64>, CalcError> {
+fn parse_number(input: &str) -> Result<Option<f64>, CalcError> {
     // Greedily match from the beginning up to the first non-number token
     let mut is_negative = false;
     let mut in_decimal= false;
@@ -151,9 +151,9 @@ fn parse_number(input: &String) -> Result<Option<f64>, CalcError> {
 }
 
 /// Converts a string to an operator
-fn parse_operator(input: &String) -> Result<Operator, CalcError> {
+fn parse_operator(input: &str) -> Result<Operator, CalcError> {
     Ok(    
-        match input.as_str() {
+        match input {
             "+" => Operator::Add,
             "-" => Operator::Sub,
             "*" => Operator::Mul,
@@ -246,7 +246,7 @@ impl fmt::Debug for Token {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub enum Operator {
     NoOp,
     Add,
@@ -341,10 +341,10 @@ pub struct OperationTree {
 impl OperationTree {
     pub fn evaluate(&self) -> Result<f64, CalcError> {
         match &self.content {
-            OperationContent::Value(v) => Ok(v.clone()),
+            OperationContent::Value(v) => Ok(*v),
             OperationContent::Operator(op) => {
-                    let v_a = self.child_a.as_ref().ok_or(CalcError::MissingOperationChild(op.clone()))?.evaluate()?;
-                    let v_b = self.child_b.as_ref().ok_or(CalcError::MissingOperationChild(op.clone()))?.evaluate()?;
+                    let v_a = self.child_a.as_ref().ok_or(CalcError::MissingOperationChild(*op))?.evaluate()?;
+                    let v_b = self.child_b.as_ref().ok_or(CalcError::MissingOperationChild(*op))?.evaluate()?;
                     match op {
                         Operator::Add => Ok(v_a + v_b),
                         Operator::Sub => Ok(v_a - v_b),
@@ -407,9 +407,9 @@ impl ExprGroup {
                     // If last token is a number, then the + or - in front of what could be a number is actually an operator!
                     if !last_token_type_was_num && !(last_token_type_was_grp && (self.contents_consumed.starts_with("+") || self.contents_consumed.starts_with("-")))
                     {
-                        let mut raw_num = self.contents_consumed.clone();
-                        self.contents_consumed = raw_num.split_off(num_end);
-                        self.parsed_content.push(Token::Value(parse_number(&raw_num)?.ok_or(CalcError::UndefinedError)?));
+                        let raw_num = &self.contents_consumed[..num_end];
+                        self.parsed_content.push(Token::Value(parse_number(raw_num)?.ok_or(CalcError::UndefinedError)?));
+                        self.contents_consumed = self.contents_consumed[num_end..].to_string();
                         last_token_type_was_num = true;
                         last_token_type_was_grp = false;
                         continue;
@@ -419,9 +419,9 @@ impl ExprGroup {
             }
 
             if match_operator(&self.contents_consumed)? {
-                let mut raw_op = self.contents_consumed.clone();
-                self.contents_consumed = raw_op.split_off(1);
-                self.parsed_content.push(Token::Operator(parse_operator(&raw_op)?));
+                let raw_op = &self.contents_consumed[..1];
+                self.parsed_content.push(Token::Operator(parse_operator(raw_op)?));
+                self.contents_consumed = self.contents_consumed[1..].to_string();
                 last_token_type_was_num = false;
                 last_token_type_was_grp = false;
                 continue;
@@ -455,8 +455,8 @@ impl ExprGroup {
         // First we convert all tokens to OperationTree singleton elements
         for t in &self.parsed_content {
             operations.push(match t {
-                Token::Operator(op) => OperationTree { content: OperationContent::Operator(op.clone()), child_a: None, child_b: None },
-                Token::Value(v) => OperationTree { content: OperationContent::Value(v.clone()), child_a: None, child_b: None },
+                Token::Operator(op) => OperationTree { content: OperationContent::Operator(*op), child_a: None, child_b: None },
+                Token::Value(v) => OperationTree { content: OperationContent::Value(*v), child_a: None, child_b: None },
                 Token::Group(grp) =>   ExprGroup::with_parsed_content(grp.to_vec()).into_operation_tree()?
             });
         };
@@ -464,7 +464,7 @@ impl ExprGroup {
         // Then, until we have merged everything into a single tree
         while operations.len() > 1 {
             // First we find the biggest operator yet
-            let mut biggest_op: &Operator = &Operator::NoOp;
+            let mut biggest_op: Operator = Operator::NoOp;
             let mut op_position = 0;
             let mut i = 0;
             for operation in &operations {
@@ -474,7 +474,7 @@ impl ExprGroup {
                  }
                 if let OperationContent::Operator(operator) = &operation.content {
                     if operator.priority() > biggest_op.priority() {
-                        biggest_op = operator;
+                        biggest_op = *operator;
                         op_position = i;
                     }
                 }
@@ -485,11 +485,11 @@ impl ExprGroup {
                 return Err(CalcError::MisplacedOperator(biggest_op.clone()))
             }
             // Then we merge that operator with its two operands
-            let op_a = operations.get(op_position-1).ok_or(CalcError::MisplacedOperator(biggest_op.clone()))?.clone();
-            let op_b = operations.get(op_position+1).ok_or(CalcError::MisplacedOperator(biggest_op.clone()))?.clone();
+            let op_a = operations.get(op_position-1).ok_or(CalcError::MisplacedOperator(biggest_op))?.clone();
+            let op_b = operations.get(op_position+1).ok_or(CalcError::MisplacedOperator(biggest_op))?.clone();
             let operation = operations.get_mut(op_position).ok_or(CalcError::UndefinedError)?;
-            operation.child_a = Some(Box::new(op_a.clone()));
-            operation.child_b = Some(Box::new(op_b.clone()));
+            operation.child_a = Some(Box::new(op_a));
+            operation.child_b = Some(Box::new(op_b));
             operations.remove(op_position-1);
             operations.remove(op_position);
         };

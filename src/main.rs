@@ -1,22 +1,43 @@
-use std::{env, io::{self, Write}};
+use std::{env, io::{self, Write}, time::Instant};
 use crate::calc::{run_calculation};
 pub mod calc;
 
 fn main() {
+    let mut flag_debug: bool = false;
     // If used as command we don't use interactive mode
     let mut args: Vec<String> = env::args().collect();
-    if args.len() > 1 {
-        args.remove(0);
-        let input = args.join(" ");
-        match run_calculation(input) {
-            Ok(r) => {
-                println!("{}", r)
+    args.remove(0);
+    if args.len() >= 1 {
+        let mut expr_start = 0;
+        for arg in args.iter() {
+            match arg.trim() {
+                "--debug" => {
+                    expr_start += 1;
+                    flag_debug = true;
+                },
+                _ => {
+
+                }
             }
-            Err(err) => {
-                eprintln!("{}", err)
-            },
         }
-        return;
+        let input = args.split_off(expr_start).join(" ");
+        if input.len() != 0 {
+            let start = Instant::now();
+            match run_calculation(input) {
+                Ok(r) => {
+                    println!("{}", r)
+                }
+                Err(err) => {
+                    eprintln!("{}", err)
+                },
+            }
+            if flag_debug {
+                let stop = Instant::now();
+                let calc_duration = stop - start;
+                println!("in {} nanoseconds", calc_duration.as_nanos())
+            }
+            return;
+        }
     }
 
     println!("Very cool calculator!");
@@ -33,6 +54,8 @@ fn main() {
             println!("Very cool calculator!");
             continue;
         }
+
+        let start = Instant::now();
         match run_calculation(input) {
             Ok(r) => {
                 println!("= {}", r)
@@ -40,6 +63,11 @@ fn main() {
             Err(err) => {
                 eprintln!("! {}", err)
             },
+        }
+        if flag_debug {
+            let stop = Instant::now();
+            let calc_duration = stop - start;
+            println!("in {} nanoseconds", calc_duration.as_nanos())
         }
     }
 }
