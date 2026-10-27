@@ -244,7 +244,7 @@ impl fmt::Debug for Token {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, PartialOrd)]
+#[derive(Clone)]
 pub enum Operator {
     NoOp,
     Add,
@@ -253,38 +253,31 @@ pub enum Operator {
     Div
 }
 
-impl core::cmp::Ord for Operator {
-    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
+impl Operator {
+    fn priority(&self) -> u8 {
         match self {
-            Operator::Add | Operator::Sub => {
-                match other {
-                    Operator::NoOp => core::cmp::Ordering::Less,
-                    Operator::Add | Operator::Sub => core::cmp::Ordering::Equal,
-                    Operator::Mul | Operator::Div => core::cmp::Ordering::Less,
-                }
-            },
-            Operator::Mul | Operator::Div => {
-                match other {
-                    Operator::NoOp => core::cmp::Ordering::Less,
-                    Operator::Add | Operator::Sub => core::cmp::Ordering::Greater,
-                    Operator::Mul | Operator::Div => core::cmp::Ordering::Equal,
-                }
-            },
-            Operator::NoOp => core::cmp::Ordering::Equal
+            Operator::NoOp => 0,
+            Operator::Add | Operator::Sub => 1,
+            Operator::Mul | Operator::Div => 2
         }
     }
 }
 
-
-impl fmt::Debug for Operator {
+impl fmt::Display for Operator {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Self::Add => write!(f, "+"),
             Self::Sub => write!(f, "-"),
             Self::Mul => write!(f, "*"),
             Self::Div => write!(f, "/"),
-            Self::NoOp => write!(f, " ")
+            Self::NoOp => write!(f, "N/A")
         }
+    }
+}
+
+impl fmt::Debug for Operator {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{}", self)
     }
 }
 
@@ -467,13 +460,14 @@ impl ExprGroup {
                     continue;
                  }
                 if let OperationContent::Operator(operator) = &operation.content {
-                    if operator > biggest_op {
+                    if operator.priority() > biggest_op.priority() {
                         biggest_op = operator;
                         op_position = i;
                     }
                 }
                 i+=1;
             }
+
             if op_position == 0 || op_position >= operations.len()-1 {
                 return Err(CalcError::MisplacedOperator(biggest_op.clone()))
             }
