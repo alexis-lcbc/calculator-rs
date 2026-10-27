@@ -375,6 +375,9 @@ impl ExprGroup {
 
     /// Parse the expression inside this ExprGroup into a Group token containing subtokens
     pub fn parse(&mut self) -> Result<Token, CalcError> {
+        // remove all whitespaces (spaces, tabs, etc...) from input
+        self.contents_consumed = self.contents_consumed.chars().filter(|c| !c.is_whitespace()).collect();
+        
         let mut last_token_type_was_num = false;
         let mut last_token_type_was_grp = false;
         // Match in order for groups, numbers then operators extracting a list of tokens from the raw 
