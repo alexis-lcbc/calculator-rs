@@ -270,7 +270,7 @@ impl core::cmp::Ord for Operator {
                     Operator::Mul | Operator::Div => core::cmp::Ordering::Equal,
                 }
             },
-            Operator::NoOp => core::cmp::Ordering::Less
+            Operator::NoOp => core::cmp::Ordering::Equal
         }
     }
 }
